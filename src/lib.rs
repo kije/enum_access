@@ -170,8 +170,8 @@ fn ident_of(bi: &BindingInfo, ident: &Ident) -> bool {
 
     &bi.binding == ident
         || get_attribute_list(&bi.ast().attrs)
-            .iter()
-            .any(|(k, v)| k == "enum_alias" && v == ident)
+        .iter()
+        .any(|(k, v)| k == "enum_alias" && v == ident)
 }
 
 fn ident_type<'a>(s: &'a Structure, ident: &Ident) -> &'a Type {
