@@ -10,10 +10,9 @@ extern crate synstructure;
 extern crate proc_macro2;
 
 use proc_macro2::{Span, TokenStream};
-use syn::{
-    AttrStyle, Attribute, Field, Fields, GenericParam, Ident, Lifetime, Lit, Meta, NestedMeta,
-    Path, Type, TypeParam, VisPublic, Visibility,
-};
+use quote::ToTokens;
+use syn::{AttrStyle, Attribute, Field, Fields, GenericParam, Ident, Lifetime, Lit, Meta, NestedMeta, Type, TypeParam, VisPublic, Visibility, LitStr, VisCrate, Path};
+use syn::token::{Crate, Pub};
 use syn_util::contains_attribute;
 use synstructure::{BindStyle, BindingInfo, Structure};
 
@@ -42,7 +41,7 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
 
     let accessors = get_accessor_list(&s.ast().attrs);
 
-    let accessor_body = accessors.iter().flat_map(|(kind, ident)| {
+    let accessor_body = accessors.iter().flat_map(|(kind, ident, vis)| {
         let ty = ident_type(&s, ident);
 
         if kind == "get" {
@@ -55,11 +54,11 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
             Some(quote! {
                 #[allow(unused_variables, dead_code)]
                 impl #impl_generics #name #ty_generics #where_clause {
-                    fn #get (&self) -> &#ty {
+                    #vis fn #get (&self) -> &#ty {
                         match self { #body }
                     }
 
-                    fn #get_mut (&mut self) -> &mut #ty {
+                    #vis fn #get_mut (&mut self) -> &mut #ty {
                         match self { #body_mut }
                     }
                 }
@@ -74,11 +73,11 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
             Some(quote! {
                 #[allow(unused_variables, dead_code)]
                 impl #impl_generics #name #ty_generics #where_clause {
-                    fn #get (&self) -> Option<&#ty> {
+                    #vis fn #get (&self) -> Option<&#ty> {
                         match self { #body }
                     }
 
-                    fn #get_mut (&mut self) -> Option<&mut #ty> {
+                    #vis fn #get_mut (&mut self) -> Option<&mut #ty> {
                         match self { #body_mut }
                     }
                 }
@@ -93,11 +92,11 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
             Some(quote! {
                 #[allow(unused_variables, dead_code)]
                 impl #impl_generics #name #ty_generics #where_clause {
-                    fn #iter (&self) -> Vec<&#ty> {
+                    #vis fn #iter (&self) -> Vec<&#ty> {
                         match *self { #body }
                     }
 
-                    fn #iter_mut (&mut self) -> Vec<&mut #ty> {
+                    #vis fn #iter_mut (&mut self) -> Vec<&mut #ty> {
                         match *self { #body_mut }
                     }
                 }
@@ -286,7 +285,7 @@ fn get_attribute_list(attrs: &[Attribute]) -> Vec<(String, Ident)> {
     result
 }
 
-fn get_accessor_list(attrs: &[Attribute]) -> Vec<(String, Ident)> {
+fn get_accessor_list(attrs: &[Attribute]) -> Vec<(String, Ident, Visibility)> {
     let mut result = Vec::new();
 
     for attr in attrs {
@@ -310,7 +309,32 @@ fn get_accessor_list(attrs: &[Attribute]) -> Vec<(String, Ident)> {
                                             result.push((
                                                 path_to_string(&meta_list.path),
                                                 ident.clone(),
+                                                Visibility::Inherited
                                             ));
+                                        }
+                                    }
+                                    NestedMeta::Meta(Meta::NameValue(ref pair)) => {
+                                        if pair.lit == Lit::from(LitStr::new("pub", pair.lit.span())) {
+                                            let visibility = Visibility::Public(VisPublic { pub_token: Pub(pair.lit.span()) });
+                                            if let Some(ident) = pair.path.get_ident() {
+                                                result.push((
+                                                    path_to_string(&meta_list.path),
+                                                    ident.clone(),
+                                                    visibility
+                                                ));
+                                            }
+                                        } else if pair.lit == Lit::from(LitStr::new("pub(crate)", pair.lit.span())) {
+                                            let visibility = Visibility::Crate(VisCrate { crate_token: Crate(pair.lit.span()) });
+                                            if let Some(ident) = pair.path.get_ident() {
+                                                result.push((
+                                                    path_to_string(&meta_list.path),
+                                                    ident.clone(),
+                                                    visibility
+                                                )
+                                                );
+                                            }
+                                        } else {
+                                            panic!("{} not allowed here. Allowed values: \"pub\", \"pub(crate)\"", pair.lit.clone().into_token_stream());
                                         }
                                     }
                                     _ => continue,
@@ -412,11 +436,11 @@ fn impl_enum_inner_struct(s: &Structure) -> TokenStream {
                     GenericParam::Type(type_param) => {
                         let type_ident = &type_param.ident;
                         Some(quote!(#type_ident))
-                    },
+                    }
                     GenericParam::Lifetime(lifetime_def) => {
                         let lifetime = &lifetime_def.lifetime;
                         Some(quote!(#lifetime))
-                    },
+                    }
                     _ => None,
                 }
             }).collect();
@@ -478,17 +502,17 @@ mod test {
     #[test]
     fn unittest_enum_access() {
         let s: DeriveInput = parse_quote! {
-            #[enum_access(get(name, address), get_some(index), iter(input))]
+            #[enum_access(get(name, address), get_some(index = "pub"), iter(input))]
             enum A {
             }
         };
         assert_eq!(
             get_accessor_list(&s.attrs),
             vec![
-                ("get".to_string(), ident!("name")),
-                ("get".to_string(), ident!("address")),
-                ("get_some".to_string(), ident!("index")),
-                ("iter".to_string(), ident!("input")),
+                ("get".to_string(), ident!("name"), Visibility::Inherited),
+                ("get".to_string(), ident!("address"), Visibility::Inherited),
+                ("get_some".to_string(), ident!("index"), parse_quote! {pub}),
+                ("iter".to_string(), ident!("input"), Visibility::Inherited),
             ]
         );
 
