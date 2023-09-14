@@ -58,7 +58,7 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
                         match self { #body }
                     }
 
-                    #vis const fn #get_mut (&mut self) -> &mut #ty {
+                    #vis fn #get_mut (&mut self) -> &mut #ty {
                         match self { #body_mut }
                     }
                 }
@@ -77,7 +77,7 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
                         match self { #body }
                     }
 
-                    #vis const fn #get_mut (&mut self) -> Option<&mut #ty> {
+                    #vis fn #get_mut (&mut self) -> Option<&mut #ty> {
                         match self { #body_mut }
                     }
                 }
