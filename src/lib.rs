@@ -54,11 +54,11 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
             Some(quote! {
                 #[allow(unused_variables, dead_code)]
                 impl #impl_generics #name #ty_generics #where_clause {
-                    #vis fn #get (&self) -> &#ty {
+                    #vis const fn #get (&self) -> &#ty {
                         match self { #body }
                     }
 
-                    #vis fn #get_mut (&mut self) -> &mut #ty {
+                    #vis const fn #get_mut (&mut self) -> &mut #ty {
                         match self { #body_mut }
                     }
                 }
@@ -73,11 +73,11 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
             Some(quote! {
                 #[allow(unused_variables, dead_code)]
                 impl #impl_generics #name #ty_generics #where_clause {
-                    #vis fn #get (&self) -> Option<&#ty> {
+                    #vis const fn #get (&self) -> Option<&#ty> {
                         match self { #body }
                     }
 
-                    #vis fn #get_mut (&mut self) -> Option<&mut #ty> {
+                    #vis const fn #get_mut (&mut self) -> Option<&mut #ty> {
                         match self { #body_mut }
                     }
                 }
