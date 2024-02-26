@@ -12,7 +12,7 @@ extern crate proc_macro2;
 use proc_macro2::{Span, TokenStream};
 use syn::{
     AttrStyle, Attribute, Field, Fields, GenericParam, Ident, Lifetime, Lit, Meta, NestedMeta,
-    Type, TypeParam, VisPublic, Visibility,
+    Path, Type, TypeParam, VisPublic, Visibility,
 };
 use syn_util::contains_attribute;
 use synstructure::{BindStyle, BindingInfo, Structure};
@@ -110,21 +110,30 @@ fn impl_enum_accessor(mut s: Structure) -> TokenStream {
     quote!( #(#accessor_body)* #inner_body )
 }
 
+fn path_to_string(path: &Path) -> String {
+    let segments: Vec<String> = path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect();
+    segments.join("::")
+}
+
 fn impl_enum_display(mut s: Structure) -> TokenStream {
     s.binding_name(|bi, i| bi.ident.clone().unwrap_or_else(|| ident!("binding{}", i)));
 
     let body = s.each_variant(|v| {
         for attr in v.ast().attrs {
             if attr.style == AttrStyle::Outer {
-                if let Some(meta) = attr.interpret_meta() {
-                    if meta.name() == "enum_display" {
+                if let Ok(meta) = attr.parse_meta() {
+                    if path_to_string(meta.path()) == "enum_display" {
                         if let Meta::List(meta_list) = meta {
                             let meta_list: Vec<_> = meta_list
                                 .nested
                                 .iter()
                                 .map(|x| {
-                                    if let NestedMeta::Literal(Lit::Int(lit_int)) = x {
-                                        let bi = ident!("binding{}", lit_int.value());
+                                    if let NestedMeta::Lit(Lit::Int(lit_int)) = x {
+                                        let bi = ident!("binding{}", lit_int);
                                         quote!(#bi)
                                     } else {
                                         quote!(#x)
@@ -250,7 +259,7 @@ fn impl_enum_iter(s: &Structure, ident: &Ident) -> TokenStream {
     })
 }
 
-fn get_attribute_list(attrs: &[Attribute]) -> Vec<(Ident, Ident)> {
+fn get_attribute_list(attrs: &[Attribute]) -> Vec<(String, Ident)> {
     let mut result = Vec::new();
 
     for attr in attrs {
@@ -258,12 +267,14 @@ fn get_attribute_list(attrs: &[Attribute]) -> Vec<(Ident, Ident)> {
             continue;
         }
 
-        if let Some(meta) = attr.interpret_meta() {
-            if let Meta::List(meta_list) = meta {
-                for meta in &meta_list.nested {
-                    match *meta {
-                        NestedMeta::Meta(Meta::Word(ref ident)) => {
-                            result.push((meta_list.ident.clone(), ident.clone()));
+        if let Ok(meta) = attr.parse_meta() {
+            if let Meta::List(meta_list) = &meta {
+                for inner_meta in &meta_list.nested {
+                    match inner_meta {
+                        NestedMeta::Meta(Meta::Path(path)) => {
+                            if let Some(ident) = path.get_ident() {
+                                result.push((path_to_string(meta.path()), ident.clone()));
+                            }
                         }
                         _ => continue,
                     }
@@ -275,7 +286,7 @@ fn get_attribute_list(attrs: &[Attribute]) -> Vec<(Ident, Ident)> {
     result
 }
 
-fn get_accessor_list(attrs: &[Attribute]) -> Vec<(Ident, Ident)> {
+fn get_accessor_list(attrs: &[Attribute]) -> Vec<(String, Ident)> {
     let mut result = Vec::new();
 
     for attr in attrs {
@@ -283,19 +294,24 @@ fn get_accessor_list(attrs: &[Attribute]) -> Vec<(Ident, Ident)> {
             continue;
         }
 
-        if let Some(meta) = attr.interpret_meta() {
-            if meta.name() != "enum_access" {
+        if let Ok(meta) = attr.parse_meta() {
+            if path_to_string(meta.path()) != "enum_access" {
                 continue;
             }
 
-            if let Meta::List(meta_list) = meta {
+            if let Meta::List(meta_list) = &meta {
                 for meta in &meta_list.nested {
                     match meta {
                         NestedMeta::Meta(Meta::List(meta_list)) => {
                             for meta in &meta_list.nested {
-                                match *meta {
-                                    NestedMeta::Meta(Meta::Word(ref ident)) => {
-                                        result.push((meta_list.ident.clone(), ident.clone()));
+                                match meta {
+                                    NestedMeta::Meta(Meta::Path(path)) => {
+                                        if let Some(ident) = path.get_ident() {
+                                            result.push((
+                                                path_to_string(&meta_list.path),
+                                                ident.clone(),
+                                            ));
+                                        }
                                     }
                                     _ => continue,
                                 }
@@ -469,10 +485,10 @@ mod test {
         assert_eq!(
             get_accessor_list(&s.attrs),
             vec![
-                (ident!("get"), ident!("name")),
-                (ident!("get"), ident!("address")),
-                (ident!("get_some"), ident!("index")),
-                (ident!("iter"), ident!("input")),
+                ("get".to_string(), ident!("name")),
+                ("get".to_string(), ident!("address")),
+                ("get_some".to_string(), ident!("index")),
+                ("iter".to_string(), ident!("input")),
             ]
         );
 

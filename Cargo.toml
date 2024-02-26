@@ -11,10 +11,17 @@ readme = "README.md"
 
 [lib]
 proc-macro = true
+[dependencies.proc-macro2]
+version = "1.0"
 
-[dependencies]
-proc-macro2 = "0.4"
-quote = "0.6"
-syn = "0.14"
-syn_util = "0.1"
-synstructure = "0.9"
+[dependencies.quote]
+version = "1.0"
+
+[dependencies.syn]
+version = "1.0"
+
+[dependencies.syn_util]
+version = "0.4"
+
+[dependencies.synstructure]
+version = "0.12"
